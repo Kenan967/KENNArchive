@@ -34,7 +34,7 @@ public class EmailService : IEmailService
         message.Body =
             $"Salam!\n\n" +
             $"Sizin KENN Archive təsdiq kodunuz: {code}\n\n" +
-            $"Bu kod 5 dəqiqə ərzində etibarlıdır.";
+            $"Bu kod yalniz 2 dəqiqə ərzində etibarlıdır!";
         await client.SendMailAsync(message);
     }
 }

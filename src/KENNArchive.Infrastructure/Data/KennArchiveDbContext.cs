@@ -19,12 +19,19 @@ public class KennArchiveDbContext
     public DbSet<Category> Categories => Set<Category>();
 
     public DbSet<Brand> Brands => Set<Brand>();
+
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<EmailVerificationCode> EmailVerificationCodes
         => Set<EmailVerificationCode>();
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
+    public DbSet<Wishlist> Wishlists => Set<Wishlist>();
+
+    public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<Product>()
             .Property(p => p.Price)
             .HasPrecision(18, 2);
