@@ -26,6 +26,9 @@ public class KennArchiveDbContext
     public DbSet<Cart> Carts => Set<Cart>();
     public DbSet<CartItem> CartItems => Set<CartItem>();
     public DbSet<Wishlist> Wishlists => Set<Wishlist>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
 
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
