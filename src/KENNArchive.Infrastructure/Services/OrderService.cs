@@ -4,8 +4,6 @@ using KENNArchive.Domain.Entities;
 using KENNArchive.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-
-
 namespace KENNArchive.Infrastructure.Services;
 
 // Sifarişlərin yaradılması və idarə olunması.
@@ -13,9 +11,7 @@ public class OrderService : IOrderService
 {
     private readonly KennArchiveDbContext _context;
 
-
-
-    public OrderService(KennArchiveDbContext context)
+public OrderService(KennArchiveDbContext context)
     {
         _context = context;
     }
@@ -40,7 +36,7 @@ public class OrderService : IOrderService
             return null;
         }
 
-        // Sifarişə başlamazdan əvvəl bütün məhsulları yoxlayırıq.
+        // Sifarişə başlamazdan əvvəl məhsulların stokunu yoxlayırıq.
         foreach (var item in cart.Items)
         {
             if (item.Product == null ||
@@ -48,8 +44,6 @@ public class OrderService : IOrderService
                 item.Product.Stock < item.Quantity)
             {
                 return null;
-
-
             }
         }
 
@@ -90,9 +84,6 @@ public class OrderService : IOrderService
                 order.TotalPrice += orderItem.TotalPrice;
             }
 
-
-
-
             _context.Orders.Add(order);
 
             // Səbəti boşaldırıq.
@@ -110,7 +101,7 @@ public class OrderService : IOrderService
         }
     }
 
-    // İstifadəçinin bütün sifarişlərini qaytarır.
+    // İstifadəçinin öz sifarişlərini qaytarır.
     public async Task<List<OrderDto>> GetMyOrdersAsync(int userId)
     {
         var orders = await _context.Orders
@@ -118,6 +109,19 @@ public class OrderService : IOrderService
             .Include(x => x.Items)
             .ThenInclude(x => x.Product)
             .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+        return orders.Select(MapToDto).ToList();
+    }
+
+    // Admin üçün bütün müştərilərin sifarişlərini qaytarır.
+    public async Task<List<OrderDto>> GetAllOrdersAsync()
+    {
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .ThenInclude(x => x.Product)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync();
 
@@ -152,13 +156,13 @@ public class OrderService : IOrderService
     {
         var allowedStatuses = new[]
         {
-            "Pending",
-            "Confirmed",
-            "Preparing",
-            "Shipped",
-            "Delivered",
-            "Cancelled"
-        };
+        "Pending",
+        "Confirmed",
+        "Preparing",
+        "Shipped",
+        "Delivered",
+        "Cancelled"
+    };
 
         if (!allowedStatuses.Contains(status))
         {
@@ -181,11 +185,6 @@ public class OrderService : IOrderService
         return true;
     }
 
-
-
-
-
-
     // Order obyektini API üçün DTO-ya çevirir.
     private static OrderDto MapToDto(
         KENNArchive.Domain.Entities.Order order)
@@ -198,8 +197,6 @@ public class OrderService : IOrderService
             ShippingAddress = order.ShippingAddress,
             CreatedAt = order.CreatedAt,
 
-
-
             Items = order.Items.Select(item => new OrderItemDto
             {
                 ProductName = item.ProductName,
@@ -210,4 +207,5 @@ public class OrderService : IOrderService
             }).ToList()
         };
     }
+
 }

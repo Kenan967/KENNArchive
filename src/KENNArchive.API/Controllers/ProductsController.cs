@@ -12,22 +12,21 @@ public class ProductsController : ControllerBase
     private readonly IProductService _productService;
     private readonly ICloudinaryService _cloudinaryService;
     private readonly IProductImageService _productImageService;
-
-    public ProductsController(
-        IProductService productService,
-        ICloudinaryService cloudinaryService,
-        IProductImageService productImageService)
+public ProductsController(
+    IProductService productService,
+    ICloudinaryService cloudinaryService,
+    IProductImageService productImageService)
     {
         _productService = productService;
         _cloudinaryService = cloudinaryService;
         _productImageService = productImageService;
     }
 
-    // Yeni Product yaradır.
+    // Yeni məhsul yaradır.
     [HttpPost]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create(
-        CreateProductRequest request)
+        [FromBody] CreateProductRequest request)
     {
         var product = await _productService.CreateAsync(request);
 
@@ -40,11 +39,13 @@ public class ProductsController : ControllerBase
         return Ok(product);
     }
 
-    // Product-ları search, filter və sorting ilə gətirir.
+    // Məhsulları axtarış, brend, kateqoriya,
+    // qiymət, sıralama və pagination ilə gətirir.
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] string? search,
         [FromQuery] string? category,
+        [FromQuery] string? brand,
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
         [FromQuery] string? sort,
@@ -54,6 +55,7 @@ public class ProductsController : ControllerBase
         var products = await _productService.GetProductsAsync(
             search,
             category,
+            brand,
             minPrice,
             maxPrice,
             sort,
@@ -63,7 +65,7 @@ public class ProductsController : ControllerBase
         return Ok(products);
     }
 
-    // Slug-a görə Product detalları.
+    // Slug-a görə məhsulun detallarını gətirir.
     [HttpGet("{slug}")]
     public async Task<IActionResult> GetBySlug(string slug)
     {
@@ -77,12 +79,12 @@ public class ProductsController : ControllerBase
         return Ok(product);
     }
 
-    // Product məlumatlarını yeniləyir.
+    // Məhsulun məlumatlarını yeniləyir.
     [HttpPut("{slug}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(
         string slug,
-        UpdateProductRequest request)
+        [FromBody] UpdateProductRequest request)
     {
         var updated = await _productService.UpdateAsync(
             slug,
@@ -97,7 +99,7 @@ public class ProductsController : ControllerBase
         return Ok("Məhsul uğurla yeniləndi.");
     }
 
-    // Product-u silir.
+    // Məhsulu silir.
     [HttpDelete("{slug}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(string slug)
@@ -112,12 +114,11 @@ public class ProductsController : ControllerBase
         return Ok("Məhsul uğurla silindi.");
     }
 
-    // Product-a aid şəkilləri gətirir.
+    // Məhsula aid şəkilləri gətirir.
     [HttpGet("{slug}/images")]
     public async Task<IActionResult> GetImages(string slug)
     {
-        var productId = await _productService
-            .GetIdBySlugAsync(slug);
+        var productId = await _productService.GetIdBySlugAsync(slug);
 
         if (productId == null)
         {
@@ -130,7 +131,7 @@ public class ProductsController : ControllerBase
         return Ok(images);
     }
 
-    // Product şəklini Cloudinary-yə yükləyir.
+    // Məhsulun şəklini Cloudinary-yə yükləyir.
     [HttpPost("{slug}/images")]
     [Authorize(Roles = "Admin")]
     [Consumes("multipart/form-data")]
@@ -143,8 +144,7 @@ public class ProductsController : ControllerBase
             return BadRequest("Şəkil seçilməyib.");
         }
 
-        var productId = await _productService
-            .GetIdBySlugAsync(slug);
+        var productId = await _productService.GetIdBySlugAsync(slug);
 
         if (productId == null)
         {
@@ -177,14 +177,12 @@ public class ProductsController : ControllerBase
         });
     }
 
-    // Product şəklini həm Cloudinary-dən,
-    // həm də database-dən silir.
+    // Şəkli Cloudinary və database-dən silir.
     [HttpDelete("images/{imageId}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteImage(int imageId)
     {
-        var deleted = await _productImageService
-            .DeleteAsync(imageId);
+        var deleted = await _productImageService.DeleteAsync(imageId);
 
         if (!deleted)
         {
@@ -193,4 +191,5 @@ public class ProductsController : ControllerBase
 
         return Ok("Şəkil uğurla silindi.");
     }
+
 }

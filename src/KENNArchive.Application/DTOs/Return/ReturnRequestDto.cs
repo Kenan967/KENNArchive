@@ -3,6 +3,7 @@
 // Qaytarılma müraciətinin cavab məlumatları.
 public class ReturnRequestDto
 {
+    public int Id { get; set; }
     public string OrderNumber { get; set; } = string.Empty;
 
     public string Reason { get; set; } = string.Empty;

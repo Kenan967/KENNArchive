@@ -16,6 +16,9 @@ public interface IReturnService
     Task<List<ReturnRequestDto>> GetMyRequestsAsync(
         int userId);
 
+    // Admin bütün müştərilərin müraciətlərini görür.
+    Task<List<ReturnRequestDto>> GetAllRequestsAsync();
+
     // Admin müraciəti təsdiqləyir və ya rədd edir.
     Task<bool> UpdateStatusAsync(
         int returnRequestId,

@@ -21,12 +21,15 @@ public class ReturnsController : ControllerBase
 
     // Müştəri yeni qaytarılma müraciəti yaradır.
     [HttpPost]
-    public async Task<IActionResult> Create(CreateReturnRequest request)
+    public async Task<IActionResult> Create(
+        [FromBody] CreateReturnRequest request)
     {
         var userId = GetUserId();
 
         if (userId == null)
+        {
             return Unauthorized();
+        }
 
         var result = await _returnService.CreateAsync(
             userId.Value,
@@ -35,23 +38,36 @@ public class ReturnsController : ControllerBase
         if (result == null)
         {
             return BadRequest(
-                "Müraciət yaradıla bilmədi. Sifarişin çatdırıldığını və məlumatları yoxlayın.");
+                "Müraciət yaradıla bilmədi. " +
+                "Sifarişin çatdırıldığını və məlumatları yoxlayın.");
         }
 
         return Ok(result);
     }
 
-    // Müştərinin öz müraciətlərini göstərir.
+    // Müştəri yalnız öz qaytarılma müraciətlərini görür.
     [HttpGet("my")]
     public async Task<IActionResult> GetMyRequests()
     {
         var userId = GetUserId();
 
         if (userId == null)
+        {
             return Unauthorized();
+        }
 
         var requests = await _returnService.GetMyRequestsAsync(
             userId.Value);
+
+        return Ok(requests);
+    }
+
+    // Admin bütün müştərilərin qaytarılma müraciətlərini görür.
+    [HttpGet("all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllRequests()
+    {
+        var requests = await _returnService.GetAllRequestsAsync();
 
         return Ok(requests);
     }
@@ -75,7 +91,8 @@ public class ReturnsController : ControllerBase
                 "Müraciət tapılmadı, artıq işlənib və ya status yanlışdır.");
         }
 
-        return Ok("Qaytarılma müraciətinin statusu yeniləndi.");
+        return Ok(
+            "Qaytarılma müraciətinin statusu yeniləndi.");
     }
 
     // JWT token-dən istifadəçinin ID-sini götürür.
@@ -85,7 +102,9 @@ public class ReturnsController : ControllerBase
             ClaimTypes.NameIdentifier);
 
         if (int.TryParse(userIdValue, out var userId))
+        {
             return userId;
+        }
 
         return null;
     }

@@ -27,30 +27,22 @@ public class ReturnService : IReturnService
             return null;
         }
 
-        // Sifarişin həmin müştəriyə aid olduğunu yoxlayırıq.
         var order = await _context.Orders
             .FirstOrDefaultAsync(x =>
                 x.OrderNumber == request.OrderNumber &&
                 x.UserId == userId);
 
-        if (order == null)
+        if (order == null || order.Status != "Delivered")
         {
             return null;
         }
 
-        // Yalnız çatdırılmış sifariş üçün qaytarılma müraciəti qəbul edirik.
-        if (order.Status != "Delivered")
-        {
-            return null;
-        }
-
-        // Eyni sifariş üçün gözləyən və ya təsdiqlənmiş müraciət varsa,
-        // yeni müraciət yaratmırıq.
         var existingRequest = await _context.ReturnRequests
             .AnyAsync(x =>
                 x.OrderId == order.Id &&
                 x.UserId == userId &&
-                (x.Status == "Pending" || x.Status == "Approved"));
+                (x.Status == "Pending" ||
+                 x.Status == "Approved"));
 
         if (existingRequest)
         {
@@ -73,6 +65,7 @@ public class ReturnService : IReturnService
 
         return new ReturnRequestDto
         {
+            Id = returnRequest.Id,
             OrderNumber = order.OrderNumber,
             Reason = returnRequest.Reason,
             Status = returnRequest.Status,
@@ -94,6 +87,7 @@ public class ReturnService : IReturnService
 
         return requests.Select(x => new ReturnRequestDto
         {
+            Id = x.Id,
             OrderNumber = x.Order?.OrderNumber ?? string.Empty,
             Reason = x.Reason,
             Status = x.Status,
@@ -102,7 +96,27 @@ public class ReturnService : IReturnService
         }).ToList();
     }
 
-    // Admin qaytarılma müraciətini təsdiqləyir və ya rədd edir.
+    // Admin bütün müştərilərin qaytarılma müraciətlərini görür.
+    public async Task<List<ReturnRequestDto>> GetAllRequestsAsync()
+    {
+        var requests = await _context.ReturnRequests
+            .AsNoTracking()
+            .Include(x => x.Order)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+        return requests.Select(x => new ReturnRequestDto
+        {
+            Id = x.Id,
+            OrderNumber = x.Order?.OrderNumber ?? string.Empty,
+            Reason = x.Reason,
+            Status = x.Status,
+            AdminNote = x.AdminNote,
+            CreatedAt = x.CreatedAt
+        }).ToList();
+    }
+
+    // Admin müraciəti təsdiqləyir və ya rədd edir.
     public async Task<bool> UpdateStatusAsync(
         int returnRequestId,
         string status,
@@ -114,11 +128,38 @@ public class ReturnService : IReturnService
         }
 
         var request = await _context.ReturnRequests
+            .Include(x => x.Order)
             .FirstOrDefaultAsync(x => x.Id == returnRequestId);
 
-        if (request == null || request.Status != "Pending")
+        if (request == null ||
+            request.Status != "Pending" ||
+            request.Order == null)
         {
             return false;
+        }
+
+        // Təsdiqlənən qaytarılma zamanı məhsulları stoka qaytarırıq.
+        if (status == "Approved")
+        {
+            var orderItems = await _context.OrderItems
+                .Where(x => x.OrderId == request.OrderId)
+                .ToListAsync();
+
+            if (orderItems.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var item in orderItems)
+            {
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(x => x.Id == item.ProductId);
+
+                if (product != null)
+                {
+                    product.Stock += item.Quantity;
+                }
+            }
         }
 
         request.Status = status;

@@ -7,11 +7,13 @@ public interface IOrderService
 {
     // Səbətdəki məhsullardan yeni sifariş yaradır.
     Task<OrderDto?> CreateOrderAsync(
-        int userId,
-        CreateOrderRequest request);
+    int userId,
+    CreateOrderRequest request);
+// İstifadəçinin bütün sifarişlərini qaytarır.
+Task<List<OrderDto>> GetMyOrdersAsync(int userId);
 
-    // İstifadəçinin bütün sifarişlərini qaytarır.
-    Task<List<OrderDto>> GetMyOrdersAsync(int userId);
+    // Admin üçün bütün müştərilərin sifarişlərini qaytarır.
+    Task<List<OrderDto>> GetAllOrdersAsync();
 
     // Bir sifarişin ətraflı məlumatlarını qaytarır.
     Task<OrderDto?> GetOrderByNumberAsync(

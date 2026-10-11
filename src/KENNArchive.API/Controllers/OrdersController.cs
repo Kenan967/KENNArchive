@@ -12,13 +12,12 @@ namespace KENNArchive.API.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
-
-    public OrdersController(IOrderService orderService)
+public OrdersController(IOrderService orderService)
     {
         _orderService = orderService;
     }
 
-    // İstifadəçi səbətindən sifariş yaradır.
+    // Müştəri səbətindən yeni sifariş yaradır.
     [HttpPost]
     public async Task<IActionResult> CreateOrder(
         CreateOrderRequest request)
@@ -43,7 +42,7 @@ public class OrdersController : ControllerBase
         return Ok(order);
     }
 
-    // İstifadəçinin öz sifarişlərini göstərir.
+    // İstifadəçinin yalnız öz sifarişlərini göstərir.
     [HttpGet("my")]
     public async Task<IActionResult> GetMyOrders()
     {
@@ -60,7 +59,17 @@ public class OrdersController : ControllerBase
         return Ok(orders);
     }
 
-    // Sifariş nömrəsinə görə sifarişin məlumatlarını göstərir.
+    // Bütün sifarişləri yalnız Admin görə bilər.
+    [HttpGet("all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllOrders()
+    {
+        var orders = await _orderService.GetAllOrdersAsync();
+
+        return Ok(orders);
+    }
+
+    // İstifadəçinin konkret sifarişini nömrəyə görə göstərir.
     [HttpGet("{orderNumber}")]
     public async Task<IActionResult> GetOrder(
         string orderNumber)
@@ -117,4 +126,5 @@ public class OrdersController : ControllerBase
 
         return null;
     }
+
 }

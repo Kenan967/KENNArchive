@@ -11,16 +11,17 @@ namespace KENNArchive.Infrastructure.Services;
 public class ProductService : IProductService
 {
     private readonly KennArchiveDbContext _context;
-
-    public ProductService(KennArchiveDbContext context)
+public ProductService(KennArchiveDbContext context)
     {
         _context = context;
     }
 
-    // Məhsulları search, sorting, filter və pagination ilə gətirir.
+    // Məhsulları axtarış, brend, kateqoriya, qiymət,
+    // sıralama və pagination ilə gətirir.
     public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(
         string? search,
         string? category,
+        string? brand,
         decimal? minPrice,
         decimal? maxPrice,
         string? sort,
@@ -33,31 +34,51 @@ public class ProductService : IProductService
             .Include(x => x.Brand)
             .AsQueryable();
 
+        // Məhsul adına görə axtarış.
         if (!string.IsNullOrWhiteSpace(search))
         {
+            search = search.Trim();
+
             query = query.Where(x =>
                 x.Name.Contains(search));
         }
 
+        // Kateqoriyaya görə filtr.
         if (!string.IsNullOrWhiteSpace(category))
         {
+            category = category.Trim();
+
             query = query.Where(x =>
                 x.Category != null &&
                 x.Category.Slug == category);
         }
 
+        // Brendə görə filtr.
+        // Məsələn: brand=nike yalnız Nike məhsullarını gətirir.
+        if (!string.IsNullOrWhiteSpace(brand))
+        {
+            brand = brand.Trim();
+
+            query = query.Where(x =>
+                x.Brand != null &&
+                x.Brand.Slug == brand);
+        }
+
+        // Minimum qiymət filtri.
         if (minPrice.HasValue)
         {
             query = query.Where(x =>
                 x.Price >= minPrice.Value);
         }
 
+        // Maksimum qiymət filtri.
         if (maxPrice.HasValue)
         {
             query = query.Where(x =>
                 x.Price <= maxPrice.Value);
         }
 
+        // Məhsulların sıralanması.
         query = sort?.ToLowerInvariant() switch
         {
             "priceasc" =>
@@ -73,9 +94,11 @@ public class ProductService : IProductService
                 query.OrderBy(x => x.Name)
         };
 
+        // Pagination üçün minimum və maksimum dəyərlər.
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
+        // Məhsulları DTO formasında qaytarırıq.
         return await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -98,7 +121,7 @@ public class ProductService : IProductService
             .ToListAsync();
     }
 
-    // Yeni Product yaradır.
+    // Yeni məhsul yaradır.
     public async Task<Product?> CreateAsync(
         CreateProductRequest request)
     {
@@ -120,11 +143,13 @@ public class ProductService : IProductService
             return null;
         }
 
+        // Məhsul adından slug yaradırıq.
         var slug = request.Name
             .Trim()
-            .ToLower()
+            .ToLowerInvariant()
             .Replace(" ", "-");
 
+        // Eyni slug-a sahib məhsulun təkrar yaradılmasının qarşısını alırıq.
         var existingProduct = await _context.Products
             .FirstOrDefaultAsync(x =>
                 x.Slug == slug);
@@ -141,8 +166,8 @@ public class ProductService : IProductService
             Description = request.Description.Trim(),
             Price = request.Price,
             Stock = request.Stock,
-            CategoryId = request.CategoryId,
-            BrandId = request.BrandId
+            CategoryId = category.Id,
+            BrandId = brand.Id
         };
 
         _context.Products.Add(product);
@@ -152,7 +177,7 @@ public class ProductService : IProductService
         return product;
     }
 
-    // Slug-a görə bir Product-un detallarını gətirir.
+    // Slug-a görə məhsulun detallarını gətirir.
     public async Task<ProductDetailDto?> GetBySlugAsync(
         string slug)
     {
@@ -188,7 +213,7 @@ public class ProductService : IProductService
             .FirstOrDefaultAsync();
     }
 
-    // Mövcud Product məlumatlarını yeniləyir.
+    // Mövcud məhsulun məlumatlarını yeniləyir.
     public async Task<bool> UpdateAsync(
         string slug,
         UpdateProductRequest request)
@@ -224,15 +249,15 @@ public class ProductService : IProductService
         product.Description = request.Description.Trim();
         product.Price = request.Price;
         product.Stock = request.Stock;
-        product.CategoryId = request.CategoryId;
-        product.BrandId = request.BrandId;
+        product.CategoryId = category.Id;
+        product.BrandId = brand.Id;
 
         await _context.SaveChangesAsync();
 
         return true;
     }
 
-    // Slug-a görə Product-u silir.
+    // Slug-a görə məhsulu silir.
     public async Task<bool> DeleteAsync(string slug)
     {
         var product = await _context.Products
@@ -251,8 +276,7 @@ public class ProductService : IProductService
         return true;
     }
 
-    // Public slug-dan database Product ID-sini tapır.
-    // ID-ni URL-də göstərmirik, yalnız daxildə istifadə edirik.
+    // Slug vasitəsilə məhsulun database ID-sini tapır.
     public async Task<int?> GetIdBySlugAsync(string slug)
     {
         return await _context.Products
@@ -260,4 +284,5 @@ public class ProductService : IProductService
             .Select(x => (int?)x.Id)
             .FirstOrDefaultAsync();
     }
+
 }

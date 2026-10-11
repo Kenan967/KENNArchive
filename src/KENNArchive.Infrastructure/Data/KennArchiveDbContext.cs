@@ -1,4 +1,4 @@
-using KENNArchive.Domain.Entities;
+﻿using KENNArchive.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +20,7 @@ public class KennArchiveDbContext
 
     public DbSet<Brand> Brands => Set<Brand>();
 
+
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<EmailVerificationCode> EmailVerificationCodes
         => Set<EmailVerificationCode>();
@@ -31,12 +32,29 @@ public class KennArchiveDbContext
     public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
 
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+
+    // Müştəri və mağaza sahibi arasındakı mesajlar.
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<Product>()
             .Property(p => p.Price)
+            .HasPrecision(18, 2);
+        // Sifarişin ümumi qiymətinin dəqiqliyini təyin edir.
+        modelBuilder.Entity<Order>()
+            .Property(o => o.TotalPrice)
+            .HasPrecision(18, 2);
+
+        // Sifarişdəki məhsulun qiymətinin dəqiqliyini təyin edir.
+        modelBuilder.Entity<OrderItem>()
+            .Property(o => o.UnitPrice)
+            .HasPrecision(18, 2);
+
+        // Sifarişdəki məhsulların ümumi qiymətinin dəqiqliyini təyin edir.
+        modelBuilder.Entity<OrderItem>()
+            .Property(o => o.TotalPrice)
             .HasPrecision(18, 2);
     }
 }
