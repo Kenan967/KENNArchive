@@ -38,4 +38,10 @@ Task<Product?> CreateAsync(
     Task<int?> GetIdBySlugAsync(
         string slug);
 
+    // Konkret ölçünün stokunu yeniləyir.
+    Task<bool> UpdateVariantStockAsync(
+        string slug,
+        int variantId,
+        int stock);
+
 }

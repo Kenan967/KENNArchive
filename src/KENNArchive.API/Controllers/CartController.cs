@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KENNArchive.API.Controllers;
 
-
-
 [ApiController]
 [Route("api/cart")]
 [Authorize]
@@ -20,7 +18,7 @@ public class CartController : ControllerBase
         _cartService = cartService;
     }
 
-    // Hazırda login olmuş istifadəçinin səbətini gətirir.
+    // Hazırkı istifadəçinin səbətini gətirir.
     [HttpGet]
     public async Task<IActionResult> GetCart()
     {
@@ -36,10 +34,10 @@ public class CartController : ControllerBase
         return Ok(cart);
     }
 
-    // Səbətə məhsul əlavə edir.
+    // Seçilmiş ölçüdən məhsulu səbətə əlavə edir.
     [HttpPost("items")]
     public async Task<IActionResult> AddItem(
-        AddCartItemRequest request)
+        [FromBody] AddCartItemRequest request)
     {
         var userId = GetUserId();
 
@@ -48,24 +46,31 @@ public class CartController : ControllerBase
             return Unauthorized();
         }
 
-        var added = await _cartService.AddItemAsync(
+        var success = await _cartService.AddItemAsync(
             userId.Value,
             request);
 
-        if (!added)
+        if (!success)
         {
-            return BadRequest(
-                "Məhsul tapılmadı və ya kifayət qədər stok yoxdur.");
+            return BadRequest(new
+            {
+                message = "Məhsul və ya ölçü tapılmadı, yaxud həmin ölçüdə kifayət qədər stok yoxdur."
+            });
         }
 
-        return Ok("Məhsul səbətə əlavə edildi.");
+        return Ok(new
+        {
+            message = "Məhsul seçilmiş ölçü ilə səbətə əlavə edildi."
+        });
     }
 
-    // Səbətdəki məhsulun sayını dəyişir.
-    [HttpPut("items/{productSlug}")]
+    // Seçilmiş ölçünün sayını dəyişir.
+    // quantity query parametrindən göndərilir.
+    [HttpPut("items/{productSlug}/{productVariantId:int}")]
     public async Task<IActionResult> UpdateItem(
         string productSlug,
-        int quantity)
+        int productVariantId,
+        [FromQuery] int quantity)
     {
         var userId = GetUserId();
 
@@ -74,24 +79,31 @@ public class CartController : ControllerBase
             return Unauthorized();
         }
 
-        var updated = await _cartService.UpdateItemAsync(
+        var success = await _cartService.UpdateItemAsync(
             userId.Value,
             productSlug,
+            productVariantId,
             quantity);
 
-        if (!updated)
+        if (!success)
         {
-            return BadRequest(
-                "Məhsul tapılmadı və ya stok kifayət deyil.");
+            return BadRequest(new
+            {
+                message = "Səbət yenilənmədi. Məhsulu, ölçünü və stoku yoxlayın."
+            });
         }
 
-        return Ok("Səbət yeniləndi.");
+        return Ok(new
+        {
+            message = "Səbət yeniləndi."
+        });
     }
 
-    // Məhsulu səbətdən silir.
-    [HttpDelete("items/{productSlug}")]
+    // Səbətdən yalnız seçilmiş ölçünü silir.
+    [HttpDelete("items/{productSlug}/{productVariantId:int}")]
     public async Task<IActionResult> RemoveItem(
-        string productSlug)
+        string productSlug,
+        int productVariantId)
     {
         var userId = GetUserId();
 
@@ -100,27 +112,34 @@ public class CartController : ControllerBase
             return Unauthorized();
         }
 
-        var removed = await _cartService.RemoveItemAsync(
+        var success = await _cartService.RemoveItemAsync(
             userId.Value,
-            productSlug);
+            productSlug,
+            productVariantId);
 
-        if (!removed)
+        if (!success)
         {
-            return NotFound("Məhsul səbətdə tapılmadı.");
+            return NotFound(new
+            {
+                message = "Məhsulun bu ölçüsü səbətdə tapılmadı."
+            });
         }
 
-        return Ok("Məhsul səbətdən silindi.");
+        return Ok(new
+        {
+            message = "Məhsul səbətdən silindi."
+        });
     }
 
-    // JWT token-dan login olmuş istifadəçinin ID-sini götürür.
+    // JWT tokenindən istifadəçi ID-sini götürür.
     private int? GetUserId()
     {
-        var userIdValue = User.FindFirstValue(
+        var userId = User.FindFirstValue(
             ClaimTypes.NameIdentifier);
 
-        if (int.TryParse(userIdValue, out var userId))
+        if (int.TryParse(userId, out var id))
         {
-            return userId;
+            return id;
         }
 
         return null;

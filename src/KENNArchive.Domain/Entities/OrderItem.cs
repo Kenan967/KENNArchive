@@ -1,5 +1,4 @@
 ﻿namespace KENNArchive.Domain.Entities;
-
 // Sifarişin içindəki hər bir məhsulu saxlayır.
 public class OrderItem : BaseEntity
 {
@@ -15,6 +14,10 @@ public class OrderItem : BaseEntity
 
     // Məhsulun sifariş zamanı olan adı.
     public string ProductName { get; set; } = string.Empty;
+
+    // Sifariş zamanı seçilmiş ölçü.
+    // Sonradan məhsulun ölçüləri dəyişsə belə, sifarişdə qalır.
+    public string Size { get; set; } = string.Empty;
 
     // Məhsulun sifariş zamanı olan qiyməti.
     public decimal UnitPrice { get; set; }

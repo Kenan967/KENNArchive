@@ -3,8 +3,6 @@ using CloudinaryDotNet.Actions;
 using KENNArchive.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
 
-
-
 namespace KENNArchive.Infrastructure.Services;
 
 // Şəkilləri Cloudinary-yə yükləyir və silir.
@@ -26,15 +24,17 @@ public class CloudinaryService : ICloudinaryService
         _cloudinary = new Cloudinary(account);
     }
 
-    // Şəkili Cloudinary-yə yükləyir.
+    // Şəkli göstərilən Cloudinary qovluğuna yükləyir.
+    // Qovluq verilməsə, əvvəlki kimi products istifadə olunur.
     public async Task<(string ImageUrl, string PublicId)> UploadImageAsync(
         Stream fileStream,
-        string fileName)
+        string fileName,
+        string folder = "kennarchive/products")
     {
         var uploadParams = new ImageUploadParams
         {
             File = new FileDescription(fileName, fileStream),
-            Folder = "kennarchive/products"
+            Folder = folder
         };
 
         var result = await _cloudinary.UploadAsync(uploadParams);
@@ -50,7 +50,7 @@ public class CloudinaryService : ICloudinaryService
             result.PublicId);
     }
 
-    // Cloudinary-də olan şəkili silir.
+    // Cloudinary-də olan şəkli silir.
     public async Task DeleteImageAsync(string publicId)
     {
         var deleteParams = new DeletionParams(publicId);

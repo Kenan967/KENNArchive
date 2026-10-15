@@ -12,8 +12,7 @@ namespace KENNArchive.API.Hubs;
 public class ChatHub : Hub
 {
     private readonly KennArchiveDbContext _context;
-
-    public ChatHub(KennArchiveDbContext context)
+public ChatHub(KennArchiveDbContext context)
     {
         _context = context;
     }
@@ -34,8 +33,7 @@ public class ChatHub : Hub
         await base.OnConnectedAsync();
     }
 
-    // İstifadəçinin Admin rolunda olub-olmadığını
-    // verilənlər bazasından yoxlayır.
+    // İstifadəçinin Admin rolunda olub-olmadığını yoxlayır.
     private async Task<bool> IsAdminAsync(int userId)
     {
         return await (
@@ -50,11 +48,9 @@ public class ChatHub : Hub
         ).AnyAsync();
     }
 
-    // Mesajı yoxlayır, verilənlər bazasında saxlayır
-    // və qarşı tərəfə göndərir.
-    public async Task SendMessage(
-        string receiverUserId,
-        string message)
+    // Göndərən və qəbul edən istifadəçiləri yoxlayır.
+    private async Task<(int SenderId, int ReceiverId)> ValidateUsersAsync(
+        string receiverUserId)
     {
         var senderUserId = Context.User?.FindFirstValue(
             ClaimTypes.NameIdentifier);
@@ -77,21 +73,6 @@ public class ChatHub : Hub
                 "Özünüzə mesaj göndərə bilməzsiniz.");
         }
 
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            throw new HubException(
-                "Mesaj boş ola bilməz.");
-        }
-
-        message = message.Trim();
-
-        if (message.Length > 2000)
-        {
-            throw new HubException(
-                "Mesaj 2000 simvoldan uzun ola bilməz.");
-        }
-
-        // Hər iki istifadəçinin mövcudluğunu yoxlayırıq.
         var senderExists = await _context.Users
             .AnyAsync(x => x.Id == senderId);
 
@@ -110,45 +91,112 @@ public class ChatHub : Hub
                 "Qəbul edən istifadəçi tapılmadı.");
         }
 
-        // Hər iki istifadəçinin rolunu database-dən yoxlayırıq.
         var senderIsAdmin = await IsAdminAsync(senderId);
         var receiverIsAdmin = await IsAdminAsync(receiverId);
 
-        Console.WriteLine($"SENDER ID: {senderId}, IS ADMIN: {senderIsAdmin}");
-        Console.WriteLine($"RECEIVER ID: {receiverId}, IS ADMIN: {receiverIsAdmin}");
-
-        // Yalnız Admin ilə müştəri arasında mesajlaşmağa icazə verilir.
         if (senderIsAdmin == receiverIsAdmin)
         {
             throw new HubException(
                 "Mesajlaşma yalnız müştəri ilə mağaza sahibi arasında mümkündür.");
         }
 
-        // Mesajı verilənlər bazasında saxlayırıq.
+        return (senderId, receiverId);
+    }
+
+    // Mətn mesajını database-də saxlayır və göndərir.
+    public async Task SendMessage(
+        string receiverUserId,
+        string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            throw new HubException(
+                "Mesaj boş ola bilməz.");
+        }
+
+        message = message.Trim();
+
+        if (message.Length > 2000)
+        {
+            throw new HubException(
+                "Mesaj 2000 simvoldan uzun ola bilməz.");
+        }
+
+        var (senderId, receiverId) =
+            await ValidateUsersAsync(receiverUserId);
+
         var chatMessage = new ChatMessage
         {
             SenderUserId = senderId,
             ReceiverUserId = receiverId,
             Message = message,
+            ImageUrl = null,
             IsRead = false,
             SentAt = DateTime.UtcNow
         };
 
         _context.ChatMessages.Add(chatMessage);
-
         await _context.SaveChangesAsync();
 
-        // Mesajı qəbul edən istifadəçiyə göndəririk.
+        await Clients.Group($"user_{receiverId}")
+            .SendAsync("ReceiveMessage", senderId, message);
+
+        await Clients.Caller
+            .SendAsync("ReceiveMessage", senderId, message);
+    }
+
+    // Cloudinary-dəki şəkil URL-sini mesaj kimi saxlayır və göndərir.
+    public async Task SendImageMessage(
+        string receiverUserId,
+        string imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl))
+        {
+            throw new HubException(
+                "Şəkil URL-si boş ola bilməz.");
+        }
+
+        if (!Uri.TryCreate(
+                imageUrl,
+                UriKind.Absolute,
+                out var imageUri)
+            || imageUri.Scheme != Uri.UriSchemeHttps
+            || !imageUri.Host.Equals(
+                "res.cloudinary.com",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new HubException(
+                "Şəkil üçün etibarlı Cloudinary URL-si göndərin.");
+        }
+
+        var (senderId, receiverId) =
+            await ValidateUsersAsync(receiverUserId);
+
+        var chatMessage = new ChatMessage
+        {
+            SenderUserId = senderId,
+            ReceiverUserId = receiverId,
+            Message = string.Empty,
+            ImageUrl = imageUrl,
+            IsRead = false,
+            SentAt = DateTime.UtcNow
+        };
+
+        _context.ChatMessages.Add(chatMessage);
+        await _context.SaveChangesAsync();
+
+        // Mövcud mətn hadisəsini qoruyuruq.
+        // Şəkil URL-si üçün ayrıca hadisə göndəririk.
         await Clients.Group($"user_{receiverId}")
             .SendAsync(
-                "ReceiveMessage",
+                "ReceiveImageMessage",
                 senderId,
-                message);
+                imageUrl);
 
-        // Mesajı göndərənin ekranında da göstəririk.
-        await Clients.Caller.SendAsync(
-            "ReceiveMessage",
-            senderId,
-            message);
+        await Clients.Caller
+            .SendAsync(
+                "ReceiveImageMessage",
+                senderId,
+                imageUrl);
     }
 }

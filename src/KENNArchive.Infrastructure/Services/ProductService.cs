@@ -11,7 +11,8 @@ namespace KENNArchive.Infrastructure.Services;
 public class ProductService : IProductService
 {
     private readonly KennArchiveDbContext _context;
-public ProductService(KennArchiveDbContext context)
+
+    public ProductService(KennArchiveDbContext context)
     {
         _context = context;
     }
@@ -32,9 +33,9 @@ public ProductService(KennArchiveDbContext context)
             .AsNoTracking()
             .Include(x => x.Category)
             .Include(x => x.Brand)
+            .Include(x => x.Variants)
             .AsQueryable();
 
-        // Məhsul adına görə axtarış.
         if (!string.IsNullOrWhiteSpace(search))
         {
             search = search.Trim();
@@ -43,7 +44,6 @@ public ProductService(KennArchiveDbContext context)
                 x.Name.Contains(search));
         }
 
-        // Kateqoriyaya görə filtr.
         if (!string.IsNullOrWhiteSpace(category))
         {
             category = category.Trim();
@@ -53,8 +53,6 @@ public ProductService(KennArchiveDbContext context)
                 x.Category.Slug == category);
         }
 
-        // Brendə görə filtr.
-        // Məsələn: brand=nike yalnız Nike məhsullarını gətirir.
         if (!string.IsNullOrWhiteSpace(brand))
         {
             brand = brand.Trim();
@@ -64,67 +62,71 @@ public ProductService(KennArchiveDbContext context)
                 x.Brand.Slug == brand);
         }
 
-        // Minimum qiymət filtri.
         if (minPrice.HasValue)
         {
             query = query.Where(x =>
                 x.Price >= minPrice.Value);
         }
 
-        // Maksimum qiymət filtri.
         if (maxPrice.HasValue)
         {
             query = query.Where(x =>
                 x.Price <= maxPrice.Value);
         }
 
-        // Məhsulların sıralanması.
         query = sort?.ToLowerInvariant() switch
         {
-            "priceasc" =>
-                query.OrderBy(x => x.Price),
-
-            "pricedesc" =>
-                query.OrderByDescending(x => x.Price),
-
-            "newest" =>
-                query.OrderByDescending(x => x.CreatedAt),
-
-            _ =>
-                query.OrderBy(x => x.Name)
+            "priceasc" => query.OrderBy(x => x.Price),
+            "pricedesc" => query.OrderByDescending(x => x.Price),
+            "newest" => query.OrderByDescending(x => x.CreatedAt),
+            _ => query.OrderBy(x => x.Name)
         };
 
-        // Pagination üçün minimum və maksimum dəyərlər.
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
-        // Məhsulları DTO formasında qaytarırıq.
-        return await query
+        var products = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new ProductDto
-            {
-                Name = x.Name,
-                Slug = x.Slug,
-                Description = x.Description,
-                Price = x.Price,
-                Stock = x.Stock,
-
-                Category = x.Category != null
-                    ? x.Category.Name
-                    : string.Empty,
-
-                Brand = x.Brand != null
-                    ? x.Brand.Name
-                    : string.Empty
-            })
             .ToListAsync();
+
+        return products.Select(x => new ProductDto
+        {
+            Name = x.Name,
+            Slug = x.Slug,
+            Description = x.Description,
+            Price = x.Price,
+            Stock = x.Stock,
+
+            Category = x.Category?.Name ?? string.Empty,
+            Brand = x.Brand?.Name ?? string.Empty,
+
+            Sizes = x.Variants
+                .OrderBy(v => v.Id)
+                .Select(v => new ProductSizeDto
+                {
+                    Id = v.Id,
+                    Size = v.Size,
+                    Stock = v.Stock
+                })
+                .ToList()
+        }).ToList();
     }
 
     // Yeni məhsul yaradır.
     public async Task<Product?> CreateAsync(
         CreateProductRequest request)
     {
+        if (request.Stock < 0 || request.Price < 0)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return null;
+        }
+
         var category = await _context.Categories
             .FirstOrDefaultAsync(x =>
                 x.Id == request.CategoryId);
@@ -143,16 +145,13 @@ public ProductService(KennArchiveDbContext context)
             return null;
         }
 
-        // Məhsul adından slug yaradırıq.
         var slug = request.Name
             .Trim()
             .ToLowerInvariant()
             .Replace(" ", "-");
 
-        // Eyni slug-a sahib məhsulun təkrar yaradılmasının qarşısını alırıq.
         var existingProduct = await _context.Products
-            .FirstOrDefaultAsync(x =>
-                x.Slug == slug);
+            .FirstOrDefaultAsync(x => x.Slug == slug);
 
         if (existingProduct != null)
         {
@@ -170,6 +169,19 @@ public ProductService(KennArchiveDbContext context)
             BrandId = brand.Id
         };
 
+        // Yeni məhsul üçün bütün ölçülər yaradılır.
+        // İlkin stok M ölçüsünə yazılır.
+        var sizes = new[] { "XS", "S", "M", "L", "XL", "XXL" };
+
+        foreach (var size in sizes)
+        {
+            product.Variants.Add(new ProductVariant
+            {
+                Size = size,
+                Stock = size == "M" ? request.Stock : 0
+            });
+        }
+
         _context.Products.Add(product);
 
         await _context.SaveChangesAsync();
@@ -181,36 +193,42 @@ public ProductService(KennArchiveDbContext context)
     public async Task<ProductDetailDto?> GetBySlugAsync(
         string slug)
     {
-        return await _context.Products
+        var product = await _context.Products
             .AsNoTracking()
             .Include(x => x.Category)
             .Include(x => x.Brand)
-            .Where(x => x.Slug == slug)
-            .Select(x => new ProductDetailDto
-            {
-                Name = x.Name,
-                Slug = x.Slug,
-                Description = x.Description,
-                Price = x.Price,
-                Stock = x.Stock,
+            .Include(x => x.Variants)
+            .FirstOrDefaultAsync(x => x.Slug == slug);
 
-                Category = x.Category != null
-                    ? x.Category.Name
-                    : string.Empty,
+        if (product == null)
+        {
+            return null;
+        }
 
-                CategorySlug = x.Category != null
-                    ? x.Category.Slug
-                    : string.Empty,
+        return new ProductDetailDto
+        {
+            Name = product.Name,
+            Slug = product.Slug,
+            Description = product.Description,
+            Price = product.Price,
+            Stock = product.Stock,
 
-                Brand = x.Brand != null
-                    ? x.Brand.Name
-                    : string.Empty,
+            Category = product.Category?.Name ?? string.Empty,
+            CategorySlug = product.Category?.Slug ?? string.Empty,
 
-                BrandSlug = x.Brand != null
-                    ? x.Brand.Slug
-                    : string.Empty
-            })
-            .FirstOrDefaultAsync();
+            Brand = product.Brand?.Name ?? string.Empty,
+            BrandSlug = product.Brand?.Slug ?? string.Empty,
+
+            Sizes = product.Variants
+                .OrderBy(v => v.Id)
+                .Select(v => new ProductSizeDto
+                {
+                    Id = v.Id,
+                    Size = v.Size,
+                    Stock = v.Stock
+                })
+                .ToList()
+        };
     }
 
     // Mövcud məhsulun məlumatlarını yeniləyir.
@@ -218,9 +236,18 @@ public ProductService(KennArchiveDbContext context)
         string slug,
         UpdateProductRequest request)
     {
+        if (request.Stock < 0 || request.Price < 0)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return false;
+        }
+
         var product = await _context.Products
-            .FirstOrDefaultAsync(x =>
-                x.Slug == slug);
+            .FirstOrDefaultAsync(x => x.Slug == slug);
 
         if (product == null)
         {
@@ -261,8 +288,7 @@ public ProductService(KennArchiveDbContext context)
     public async Task<bool> DeleteAsync(string slug)
     {
         var product = await _context.Products
-            .FirstOrDefaultAsync(x =>
-                x.Slug == slug);
+            .FirstOrDefaultAsync(x => x.Slug == slug);
 
         if (product == null)
         {
@@ -285,4 +311,33 @@ public ProductService(KennArchiveDbContext context)
             .FirstOrDefaultAsync();
     }
 
+    // Məhsulun konkret ölçüsünün stokunu yeniləyir.
+    public async Task<bool> UpdateVariantStockAsync(
+        string slug,
+        int variantId,
+        int stock)
+    {
+        if (stock < 0)
+        {
+            return false;
+        }
+
+        var variant = await _context.ProductVariants
+            .Include(x => x.Product)
+            .FirstOrDefaultAsync(x =>
+                x.Id == variantId &&
+                x.Product != null &&
+                x.Product.Slug == slug);
+
+        if (variant == null)
+        {
+            return false;
+        }
+
+        variant.Stock = stock;
+
+        await _context.SaveChangesAsync();
+
+        return true;
+    }
 }

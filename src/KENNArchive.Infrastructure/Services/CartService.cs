@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KENNArchive.Infrastructure.Services;
 
-// İstifadəçinin səbət əməliyyatlarını database üzərindən idarə edir.
+// İstifadəçinin səbət əməliyyatlarını idarə edir.
 public class CartService : ICartService
 {
     private readonly KennArchiveDbContext _context;
@@ -16,12 +16,15 @@ public class CartService : ICartService
         _context = context;
     }
 
-    // İstifadəçinin səbətini gətirir.
+    // İstifadəçinin səbətini ölçülərlə birlikdə gətirir.
     public async Task<CartDto> GetCartAsync(int userId)
     {
         var cart = await _context.Carts
+            .AsNoTracking()
             .Include(x => x.Items)
-            .ThenInclude(x => x.Product)
+                .ThenInclude(x => x.Product)
+            .Include(x => x.Items)
+                .ThenInclude(x => x.ProductVariant)
             .FirstOrDefaultAsync(x => x.UserId == userId);
 
         if (cart == null)
@@ -35,6 +38,11 @@ public class CartService : ICartService
             {
                 ProductName = x.Product!.Name,
                 ProductSlug = x.Product.Slug,
+
+                ProductVariantId = x.ProductVariantId ?? 0,
+
+                Size = x.ProductVariant?.Size ?? string.Empty,
+
                 Price = x.Product.Price,
                 Quantity = x.Quantity,
                 TotalPrice = x.Product.Price * x.Quantity
@@ -48,12 +56,14 @@ public class CartService : ICartService
         };
     }
 
-    // Səbətə məhsul əlavə edir.
+    // Seçilmiş ölçüdən məhsulu səbətə əlavə edir.
     public async Task<bool> AddItemAsync(
         int userId,
         AddCartItemRequest request)
     {
-        if (request.Quantity <= 0)
+        if (request.Quantity <= 0 ||
+            string.IsNullOrWhiteSpace(request.ProductSlug) ||
+            request.ProductVariantId <= 0)
         {
             return false;
         }
@@ -67,14 +77,23 @@ public class CartService : ICartService
             return false;
         }
 
-        if (product.Stock < request.Quantity)
+        var variant = await _context.ProductVariants
+            .FirstOrDefaultAsync(x =>
+                x.Id == request.ProductVariantId &&
+                x.ProductId == product.Id);
+
+        if (variant == null)
+        {
+            return false;
+        }
+
+        if (variant.Stock < request.Quantity)
         {
             return false;
         }
 
         var cart = await _context.Carts
-            .FirstOrDefaultAsync(x =>
-                x.UserId == userId);
+            .FirstOrDefaultAsync(x => x.UserId == userId);
 
         if (cart == null)
         {
@@ -88,17 +107,19 @@ public class CartService : ICartService
             await _context.SaveChangesAsync();
         }
 
+        // Eyni məhsulun eyni ölçüsü bir sətirdə saxlanılır.
         var existingItem = await _context.CartItems
             .FirstOrDefaultAsync(x =>
                 x.CartId == cart.Id &&
-                x.ProductId == product.Id);
+                x.ProductId == product.Id &&
+                x.ProductVariantId == variant.Id);
 
         if (existingItem != null)
         {
             var newQuantity =
                 existingItem.Quantity + request.Quantity;
 
-            if (newQuantity > product.Stock)
+            if (newQuantity > variant.Stock)
             {
                 return false;
             }
@@ -107,14 +128,13 @@ public class CartService : ICartService
         }
         else
         {
-            var cartItem = new CartItem
+            _context.CartItems.Add(new CartItem
             {
                 CartId = cart.Id,
                 ProductId = product.Id,
+                ProductVariantId = variant.Id,
                 Quantity = request.Quantity
-            };
-
-            _context.CartItems.Add(cartItem);
+            });
         }
 
         await _context.SaveChangesAsync();
@@ -122,13 +142,14 @@ public class CartService : ICartService
         return true;
     }
 
-    // Səbətdəki məhsulun sayını dəyişir.
+    // Səbətdə seçilmiş ölçünün sayını dəyişir.
     public async Task<bool> UpdateItemAsync(
         int userId,
         string productSlug,
+        int productVariantId,
         int quantity)
     {
-        if (quantity <= 0)
+        if (quantity <= 0 || productVariantId <= 0)
         {
             return false;
         }
@@ -136,18 +157,20 @@ public class CartService : ICartService
         var item = await _context.CartItems
             .Include(x => x.Cart)
             .Include(x => x.Product)
+            .Include(x => x.ProductVariant)
             .FirstOrDefaultAsync(x =>
                 x.Cart != null &&
                 x.Cart.UserId == userId &&
                 x.Product != null &&
-                x.Product.Slug == productSlug);
+                x.Product.Slug == productSlug &&
+                x.ProductVariantId == productVariantId);
 
-        if (item == null || item.Product == null)
+        if (item == null || item.ProductVariant == null)
         {
             return false;
         }
 
-        if (quantity > item.Product.Stock)
+        if (quantity > item.ProductVariant.Stock)
         {
             return false;
         }
@@ -159,11 +182,17 @@ public class CartService : ICartService
         return true;
     }
 
-    // Məhsulu səbətdən silir.
+    // Səbətdən yalnız seçilmiş ölçünü silir.
     public async Task<bool> RemoveItemAsync(
         int userId,
-        string productSlug)
+        string productSlug,
+        int productVariantId)
     {
+        if (productVariantId <= 0)
+        {
+            return false;
+        }
+
         var item = await _context.CartItems
             .Include(x => x.Cart)
             .Include(x => x.Product)
@@ -171,7 +200,8 @@ public class CartService : ICartService
                 x.Cart != null &&
                 x.Cart.UserId == userId &&
                 x.Product != null &&
-                x.Product.Slug == productSlug);
+                x.Product.Slug == productSlug &&
+                x.ProductVariantId == productVariantId);
 
         if (item == null)
         {

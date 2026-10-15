@@ -7,6 +7,11 @@ public class CartItemDto
 
     public string ProductSlug { get; set; } = string.Empty;
 
+    // Səbətdə seçilmiş ölçü.
+    public int ProductVariantId { get; set; }
+
+    public string Size { get; set; } = string.Empty;
+
     public decimal Price { get; set; }
 
     public int Quantity { get; set; }

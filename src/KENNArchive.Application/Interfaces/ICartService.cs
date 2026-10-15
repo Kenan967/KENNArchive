@@ -2,7 +2,7 @@
 
 namespace KENNArchive.Application.Interfaces;
 
-// İstifadəçi səbətinin əməliyyatlarını idarə edir.
+// Səbət əməliyyatlarının müqaviləsi.
 public interface ICartService
 {
     Task<CartDto> GetCartAsync(int userId);
@@ -14,9 +14,11 @@ public interface ICartService
     Task<bool> UpdateItemAsync(
         int userId,
         string productSlug,
+        int productVariantId,
         int quantity);
 
     Task<bool> RemoveItemAsync(
         int userId,
-        string productSlug);
+        string productSlug,
+        int productVariantId);
 }

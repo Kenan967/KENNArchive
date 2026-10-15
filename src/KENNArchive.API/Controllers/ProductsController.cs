@@ -12,10 +12,11 @@ public class ProductsController : ControllerBase
     private readonly IProductService _productService;
     private readonly ICloudinaryService _cloudinaryService;
     private readonly IProductImageService _productImageService;
-public ProductsController(
-    IProductService productService,
-    ICloudinaryService cloudinaryService,
-    IProductImageService productImageService)
+
+    public ProductsController(
+        IProductService productService,
+        ICloudinaryService cloudinaryService,
+        IProductImageService productImageService)
     {
         _productService = productService;
         _cloudinaryService = cloudinaryService;
@@ -33,14 +34,13 @@ public ProductsController(
         if (product == null)
         {
             return BadRequest(
-                "Category və ya Brand tapılmadı, yaxud bu adda Product artıq mövcuddur.");
+                "Kateqoriya və ya brend tapılmadı, yaxud bu adda məhsul artıq mövcuddur.");
         }
 
         return Ok(product);
     }
 
-    // Məhsulları axtarış, brend, kateqoriya,
-    // qiymət, sıralama və pagination ilə gətirir.
+    // Məhsulları axtarış, kateqoriya, brend, qiymət və sıralama ilə gətirir.
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] string? search,
@@ -86,14 +86,12 @@ public ProductsController(
         string slug,
         [FromBody] UpdateProductRequest request)
     {
-        var updated = await _productService.UpdateAsync(
-            slug,
-            request);
+        var updated = await _productService.UpdateAsync(slug, request);
 
         if (!updated)
         {
             return BadRequest(
-                "Məhsul, Category və ya Brand tapılmadı.");
+                "Məhsul, kateqoriya və ya brend tapılmadı.");
         }
 
         return Ok("Məhsul uğurla yeniləndi.");
@@ -131,7 +129,7 @@ public ProductsController(
         return Ok(images);
     }
 
-    // Məhsulun şəklini Cloudinary-yə yükləyir.
+    // Məhsula maksimum 3 şəkil yükləyir.
     [HttpPost("{slug}/images")]
     [Authorize(Roles = "Admin")]
     [Consumes("multipart/form-data")]
@@ -144,6 +142,7 @@ public ProductsController(
             return BadRequest("Şəkil seçilməyib.");
         }
 
+        // Məhsulun mövcud olub-olmadığını yoxlayırıq.
         var productId = await _productService.GetIdBySlugAsync(slug);
 
         if (productId == null)
@@ -151,6 +150,17 @@ public ProductsController(
             return NotFound("Məhsul tapılmadı.");
         }
 
+        // Mövcud şəkillərin sayını yoxlayırıq.
+        var existingImages = await _productImageService
+            .GetByProductIdAsync(productId.Value);
+
+        if (existingImages.Count() >= 3)
+        {
+            return BadRequest(
+                "Bir məhsula maksimum 3 şəkil əlavə etmək olar.");
+        }
+
+        // Şəkli Cloudinary-yə yükləyirik.
         await using var stream = request.File.OpenReadStream();
 
         var cloudinaryResult =
@@ -158,6 +168,7 @@ public ProductsController(
                 stream,
                 request.File.FileName);
 
+        // Şəkil məlumatlarını database-də saxlayırıq.
         var saved = await _productImageService.AddAsync(
             productId.Value,
             cloudinaryResult.ImageUrl,
@@ -192,4 +203,36 @@ public ProductsController(
         return Ok("Şəkil uğurla silindi.");
     }
 
+    // Məhsulun konkret ölçüsünün stokunu yeniləyir.
+    [HttpPut("{slug}/sizes/{variantId:int}/stock")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateVariantStock(
+        string slug,
+        int variantId,
+        [FromBody] UpdateProductVariantStockRequest request)
+    {
+        if (request.Stock < 0)
+        {
+            return BadRequest("Stok mənfi ola bilməz.");
+        }
+
+        var updated = await _productService.UpdateVariantStockAsync(
+            slug,
+            variantId,
+            request.Stock);
+
+        if (!updated)
+        {
+            return NotFound(
+                "Məhsul və ya həmin məhsula aid ölçü tapılmadı.");
+        }
+
+        return Ok(new
+        {
+            Message = "Ölçünün stoku uğurla yeniləndi.",
+            Slug = slug,
+            VariantId = variantId,
+            Stock = request.Stock
+        });
+    }
 }

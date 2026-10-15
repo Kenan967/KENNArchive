@@ -1,6 +1,6 @@
 ﻿namespace KENNArchive.Domain.Entities;
 
-// Səbətdəki bir Product-u və sayını saxlayır.
+// Səbətdəki məhsulu, ölçüsünü və sayını saxlayır.
 public class CartItem : BaseEntity
 {
     public int CartId { get; set; }
@@ -11,5 +11,12 @@ public class CartItem : BaseEntity
 
     public Product? Product { get; set; }
 
+    // Müştərinin seçdiyi ölçünün ID-si.
+    // Nullable saxlanılır ki, köhnə səbət məlumatları qorunsun.
+    public int? ProductVariantId { get; set; }
+
+    public ProductVariant? ProductVariant { get; set; }
+
+    // Səbətə əlavə edilən məhsulun sayı.
     public int Quantity { get; set; }
 }
